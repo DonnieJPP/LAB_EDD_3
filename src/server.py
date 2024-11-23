@@ -3,6 +3,11 @@ import threading
 import json
 from config import CONFIG_PARAMS
 
+# Configuration Parameters
+IP_ADDRESS = CONFIG_PARAMS['SERVER_IP_ADDRESS']
+PORT = CONFIG_PARAMS['SERVER_PORT']
+
+
 def handle_client(conn, workers):
     try:
         data = conn.recv(2048)
@@ -22,17 +27,19 @@ def handle_client(conn, workers):
         print("Error manejando cliente:", e)
     finally:
         conn.close()
-
 def server():
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.bind(("0.0.0.0", CONFIG_PARAMS['SERVER_PORT']))
-    server_sock.listen(CONFIG_PARAMS['SERVER_MAX_CLIENTS'])
-    print(f"Servidor activo en {CONFIG_PARAMS['SERVER_IP_ADDRESS']}:{CONFIG_PARAMS['SERVER_PORT']}...")
+    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Permitir reutilización de la dirección
+    server_sock.bind(('127.0.0.1', 8081))  # Dirección y puerto correctos
+    server_sock.listen(1)
 
-    workers = [8082, 8083]  # Puertos de los workers
-    while True:
-        conn, _ = server_sock.accept()
-        threading.Thread(target=handle_client, args=(conn, workers)).start()
+    print("Esperando conexiones...")
+    conn, addr = server_sock.accept()
+    print(f"Conexión establecida con {addr}")
+    
+    # Lógica de procesamiento posterior
+    conn.close()
+    server_sock.close()
 
 if __name__ == '__main__':
     server()

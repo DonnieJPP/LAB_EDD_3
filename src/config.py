@@ -1,8 +1,9 @@
-# Configuration Parameters
 CONFIG_PARAMS = {
     'SERVER_IP_ADDRESS': '192.168.1.91',  # Dirección IP del servidor
     'SERVER_PORT': 8081,                  # Puerto del servidor principal
-    'SERVER_MAX_CLIENTS': 50,             # Máximo de clientes que pueden conectarse al servidor
+    'WORKER_0_IP': '127.0.0.1',           # IP del primer worker (worker_0)
+    'WORKER_0_PORT': 8082,                # Puerto para worker_0
+    'WORKER_1_IP': '127.0.0.1',           # IP del segundo worker (worker_1)
+    'WORKER_1_PORT': 8083,                # Puerto para worker_1
     'EXIT_MESSAGE': 'exit',               # Mensaje para cerrar la conexión desde el cliente
-    'WORKER_PORTS': [8082, 8083],         # Puertos para los workers
 }
