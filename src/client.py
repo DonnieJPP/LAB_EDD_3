@@ -1,7 +1,6 @@
 import socket
 import json
 import random
-import subprocess
 from config import CONFIG_PARAMS
 
 # Configuration Parameters
@@ -20,9 +19,7 @@ def load_vector_from_file(file_path):
         return []
 
 def client():
-      # Iniciar workers automáticamente en segundo plano
-    subprocess.Popen(["python", "worker.py", "worker_0"])
-    subprocess.Popen(["python", "worker.py", "worker_1"])
+    
 
     # Establecer conexión con worker_0
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
