@@ -1,29 +1,34 @@
 import socket
 import json
-import random
+import os
 from config import CONFIG_PARAMS
 
-# Configuration Parameters
-SERVER_IP_ADDRESS = CONFIG_PARAMS['SERVER_IP_ADDRESS']
-SERVER_PORT = CONFIG_PARAMS['SERVER_PORT']
-EXIT_MESSAGE = CONFIG_PARAMS['EXIT_MESSAGE']
+
 
 def load_vector_from_file(file_path):
-    """Carga el vector desde un archivo de texto"""
+    """Carga el vector desde un archivo de texto."""
     try:
         with open(file_path, 'r') as file:
-            vector = [int(num) for num in file.read().split()]
+            vector = [int(line.strip()) for line in file]
         return vector
+    except FileNotFoundError:
+        print(f"Error: el archivo '{file_path}' no se encontró.")
+        return []
+    except ValueError:
+        print(f"Error: el archivo '{file_path}' contiene datos no válidos.")
+        return []
     except Exception as e:
-        print(f"Error al cargar el archivo: {e}")
+        print(f"Error al leer el archivo '{file_path}': {e}")
         return []
 
-def client():
-    
 
-    # Establecer conexión con worker_0
+def client():
+    import socket
+    import json
+    from config import CONFIG_PARAMS
+
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((CONFIG_PARAMS['WORKER_0_IP'], CONFIG_PARAMS['WORKER_0_PORT']))
+    client_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
 
     try:
         while True:
@@ -34,20 +39,29 @@ def client():
 
             if choice == "2":
                 client_socket.sendall(CONFIG_PARAMS['EXIT_MESSAGE'].encode('utf-8'))
-                print("[Cliente] Mensaje de salida enviado. Cerrando conexión.")
+                print("[Cliente] Saliendo.")
                 break
 
-            # Resolver problema
+            # Pedir detalles del problema
             print("1. Mergesort\n2. Heapsort\n3. Quicksort")
             algorithm_choice = input("Seleccione algoritmo (1-3): ")
+            if algorithm_choice not in {"1", "2", "3"}:
+                print("Opción inválida. Intente de nuevo.")
+                continue
             algorithm = {"1": "mergesort", "2": "heapsort", "3": "quicksort"}[algorithm_choice]
 
-            t = int(input("Tiempo por worker (segundos): "))
-            n = int(input("Tamaño del vector: "))
-            vector = [random.randint(0, 1000000) for _ in range(n)]
+            # Crear la ruta al archivo `ejemplo.txt`
+            current_dir = os.path.dirname(__file__)  # Directorio donde está este script
+            file_path = os.path.join(current_dir, "data", "ejemplo.txt")
+            vector = load_vector_from_file(file_path)
+            if not vector:
+                print("Error al cargar el archivo 'ejemplo.txt'. Verifique su contenido o existencia.")
+                continue
+
+            t = int(input("Tiempo por worker (en segundos): "))
 
             task = {"algorithm": algorithm, "time": t, "vector": vector}
-            print("[Cliente] Enviando datos al worker_0...")
+            print("[Cliente] Enviando datos al servidor...")
             client_socket.sendall(json.dumps(task).encode('utf-8'))
 
             result = client_socket.recv(4096)
