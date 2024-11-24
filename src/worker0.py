@@ -56,7 +56,7 @@ def worker(worker_id, port):
                 time_limit = data['time_limit']
                 vector = data['vector']
 
-                print(f"[Worker {worker_id}] Datos recibidos: algoritmo={algorithm}, tiempo límite={time_limit}, vector (primeros 10 elementos)={vector[:10]}")
+                print(f"[Worker {worker_id}] Datos recibidos: algoritmo={algorithm}, tiempo límite={time_limit}, vector (primeros 100 elementos)={vector[:100]}")
 
                 start_time = time.time()
                 vector = timed_sort(algorithm, vector, time_limit)
