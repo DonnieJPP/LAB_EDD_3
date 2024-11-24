@@ -1,83 +1,106 @@
-from pathlib import Path
 import socket
 import json
 from config import CONFIG_PARAMS
 
-def load_vector_from_file(file_path):
-    """Carga el vector desde un archivo de texto donde cada número está en una línea."""
+def load_vector_from_file(filename):
     try:
-        file_path = Path(file_path).resolve(strict=True)
-        with file_path.open('r') as file:
+        print(f"[Cliente] Intentando leer archivo: {filename}")
+        with open(filename, 'r') as file:
             vector = [int(line.strip()) for line in file]
-        return vector
+            print(f"[Cliente] Vector leído exitosamente. Tamaño: {len(vector)}")
+            return vector
+    except FileNotFoundError:
+        print(f"[Cliente] Error: El archivo {filename} no existe")
+        return None
     except Exception as e:
-        print(f"[Cliente] Error al cargar el archivo '{file_path}': {e}")
-        return []
-
-def send_large_data(sock, data):
-    """Envía datos grandes en partes."""
-    serialized = json.dumps(data)
-    sock.sendall(serialized.encode('utf-8'))
+        print(f"[Cliente] Error al leer archivo: {e}")
+        return None
 
 def client():
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
-
     try:
+        print("[Cliente] Iniciando conexión con el servidor...")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
+        
+        # Identificarse con el servidor
+        sock.send("client".encode())
+        print("[Cliente] Conectado exitosamente al servidor")
+        
         while True:
-            print("\nOpciones:")
-            print("1. Resolver problema")
+            print("\n=== Menú de Ordenamiento ===")
+            print("1. Ordenar vector")
             print("2. Salir")
-            choice = input("Seleccione una opción (1-2): ")
-
+            choice = input("Seleccione una opción: ")
+            
             if choice == "2":
-                client_socket.sendall(CONFIG_PARAMS['EXIT_MESSAGE'].encode('utf-8'))
-                print("[Cliente] Saliendo.")
+                print("[Cliente] Enviando solicitud de salida")
+                sock.send(json.dumps({'command': CONFIG_PARAMS['EXIT_MESSAGE']}).encode())
                 break
-
-            print("\nAlgoritmos disponibles:")
-            print("1. Mergesort")
-            print("2. Heapsort")
-            print("3. Quicksort")
-            algorithm_choice = input("Seleccione algoritmo (1-3): ")
-            if algorithm_choice not in {"1", "2", "3"}:
-                print("[Cliente] Opción inválida. Intente de nuevo.")
-                continue
-            algorithm = {"1": "mergesort", "2": "heapsort", "3": "quicksort"}[algorithm_choice]
-
-            file_path = Path(__file__).parent / "data" / "ejemplo.txt"
-            vector = load_vector_from_file(file_path)
-            if not vector:
-                print("[Cliente] Error al cargar el archivo 'ejemplo.txt'. Verifique su contenido o existencia.")
-                continue
-
-            try:
-                t = int(input("Tiempo por worker (en segundos): "))
-                if t <= 0:
-                    print("[Cliente] El tiempo debe ser un número positivo.")
+                
+            if choice == "1":
+                # Selección de algoritmo
+                print("\nAlgoritmos disponibles:")
+                print("1. Mergesort")
+                print("2. Heapsort")
+                print("3. Quicksort")
+                alg_choice = input("Seleccione algoritmo (1-3): ")
+                
+                algorithm = {
+                    "1": "mergesort",
+                    "2": "heapsort",
+                    "3": "quicksort"
+                }.get(alg_choice)
+                
+                if not algorithm:
+                    print("[Cliente] Error: Algoritmo inválido")
                     continue
-            except ValueError:
-                print("[Cliente] Debe ingresar un número válido para el tiempo.")
-                continue
-
-            task = {"algorithm": algorithm, "time": t, "vector": vector}
-            print("[Cliente] Enviando datos al servidor...")
-            send_large_data(client_socket, task)
-
-            result = b""
-            while True:
-                part = client_socket.recv(4096)
-                if not part:
-                    break
-                result += part
-            result_data = json.loads(result.decode('utf-8'))
-            print(f"\n[Cliente] Vector ordenado (primeros 100 elementos): {result_data['vector'][:100]}")
-            print(f"[Cliente] Tiempo total empleado: {result_data['time']} segundos")
-
+                
+                # Solicitar archivo
+                filename = input("Ingrese la ruta del archivo con el vector: ")
+                vector = load_vector_from_file(filename)
+                if not vector:
+                    continue
+                
+                # Tiempo límite
+                try:
+                    time_limit = float(input("Tiempo límite por worker (segundos): "))
+                    if time_limit <= 0:
+                        print("[Cliente] Error: El tiempo debe ser mayor a 0")
+                        continue
+                except ValueError:
+                    print("[Cliente] Error: Tiempo inválido")
+                    continue
+                
+                # Preparar y enviar tarea
+                task = {
+                    'algorithm': algorithm,
+                    'vector': vector,
+                    'time_limit': time_limit
+                }
+                
+                print("\n[Cliente] Enviando tarea al servidor")
+                print(f"[Cliente] - Algoritmo: {algorithm}")
+                print(f"[Cliente] - Tamaño del vector: {len(vector)}")
+                print(f"[Cliente] - Tiempo límite por worker: {time_limit}s")
+                
+                sock.send(json.dumps(task).encode())
+                print("[Cliente] Esperando resultado...")
+                
+                # Recibir y mostrar resultado
+                result = json.loads(sock.recv(4096).decode())
+                if 'error' in result:
+                    print(f"[Cliente] Error recibido: {result['error']}")
+                else:
+                    print("\n=== Resultado del Ordenamiento ===")
+                    print(f"Primeros 10 elementos ordenados: {result['vector'][:100]}")
+                    print(f"Últimos 10 elementos ordenados: {result['vector'][-100:]}")
+                    print(f"Tiempo total de procesamiento: {result['time_used']:.2f} segundos")
+                    print(f"Completado por: Worker {result['completed_by']}")
+    
+    except ConnectionRefusedError:
+        print("[Cliente] Error: No se pudo conectar al servidor")
     except Exception as e:
-        print("[Cliente] Error:", e)
+        print(f"[Cliente] Error inesperado: {e}")
     finally:
-        client_socket.close()
-
-if __name__ == '__main__':
-    client()
+        print("[Cliente] Cerrando conexión")
+        sock.close()
