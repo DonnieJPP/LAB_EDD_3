@@ -17,30 +17,28 @@ def load_vector_from_file(file_path):
 def send_large_data(socket, data):
     try:
         serialized_data = json.dumps(data).encode('utf-8')
-        socket.sendall(serialized_data)
-        socket.sendall(b'__END__')  # Marcar el final de los datos
+        socket.sendall(serialized_data + b'__END__')
     except Exception as e:
         print(f"[Cliente] Error al enviar datos: {e}")
 
 def recv_large_data(socket):
-    """
-    Recibe datos del socket en fragmentos y devuelve el mensaje completo.
-    """
     buffer = b""
     while True:
-        chunk = socket.recv(4096)  # Recibe fragmentos de 4096 bytes
-        if b'__END__' in chunk:  # Si encuentra el marcador de fin
-            buffer += chunk.replace(b'__END__', b'')  # Elimina el marcador
+        chunk = socket.recv(8192)
+        if not chunk:  # Verifica si la conexión se cerró abruptamente
+            print("[Cliente] Conexión cerrada inesperadamente.")
+            return None  # Manejo de error
+        if b'__END__' in chunk:
+            buffer += chunk.replace(b'__END__', b'')
             break
         buffer += chunk
 
     try:
-        print(f"[Cliente] Datos recibidos: {buffer[:200]}...")  # Muestra los primeros 200 bytes
-        return json.loads(buffer.decode('utf-8'))  # Decodifica y devuelve como dict
+        return json.loads(buffer.decode('utf-8'))
     except json.JSONDecodeError as e:
-        print(f"[Cliente] Error al decodificar los datos: {e}")
+        print(f"[Cliente] Error al decodificar JSON: {e}")
+        print(f"[Cliente] Datos recibidos: {buffer}")
         return None
-
 
 def client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -88,7 +86,7 @@ def client():
             print("[Cliente] Enviando tarea a Worker 0...")
             send_large_data(client_socket, task)
 
-            response = client_socket.recv(4096)
+            response = client_socket.recv(9192)
             result = json.loads(response.decode('utf-8'))
             print(f"\n[Cliente] Vector ordenado (primeros 10 elementos): {result['vector'][:10]}")
             print(f"[Cliente] Tiempo total: {result['time']} segundos")

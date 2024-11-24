@@ -19,7 +19,7 @@ def handle_worker(conn, addr, worker_id):
                 break
 
             # Esperar respuesta del worker
-            result = conn.recv(4096)
+            result = conn.recv(8192)
             if not result:
                 print(f"[Servidor] Worker {worker_id} desconectado.")
                 break

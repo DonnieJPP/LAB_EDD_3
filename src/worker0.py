@@ -6,6 +6,8 @@ from client import recv_large_data
 from config import CONFIG_PARAMS
 from sorting_algorithms import merge_sort, heap_sort, quick_sort
 
+stop_flag = threading.Event()
+
 class Worker0:
     def __init__(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -17,14 +19,21 @@ class Worker0:
         """Recibe un mensaje JSON largo desde un socket, en múltiples fragmentos."""
         buffer = b""
         while True:
-            chunk = conn.recv(4096)
+            chunk = conn.recv(8192)
             if b'__END__' in chunk:
                 buffer += chunk.split(b'__END__')[0]
                 break
             buffer += chunk
-        return json.loads(buffer.decode('utf-8'))    
+        return json.loads(buffer.decode('utf-8')) 
+
+    def send_large_data(self, socket, data):
+      """Envía datos grandes en fragmentos."""
+      serialized_data = json.dumps(data).encode('utf-8')
+      socket.sendall(serialized_data)
+      socket.sendall(b'__END__')   
 
     def sort_vector(self, vector, algorithm, time_limit):
+        stop_flag.clear()
         start_time = time.time()
         sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
 
@@ -34,9 +43,11 @@ class Worker0:
 
         elapsed_time = time.time() - start_time
         if sort_thread.is_alive():
+            stop_flag.set()
             print("[Worker 0] Tiempo límite alcanzado. Delegando a Worker 1.")
-            return False, elapsed_time
-        return True, elapsed_time
+            sort_thread.join()
+            return False, vector, elapsed_time
+        return True, vector,time.time() - start_time
 
     def handle_client(self, conn):
         try:
@@ -45,18 +56,20 @@ class Worker0:
             vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
             print(f"[Worker 0] Recibida tarea con {len(vector)} elementos, algoritmo: {algorithm}")
 
-            success, elapsed_time = self.sort_vector(vector, algorithm, time_limit)
+            success, vector, elapsed_time = self.sort_vector(vector, algorithm, time_limit)
             if success:
                 response = {"vector": vector, "time": elapsed_time, "worker_id": 0}
             else:
                 # Delegar a Worker 1
+                task["vector"] = vector
                 worker1_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 worker1_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_1_PORT']))
-                worker1_socket.sendall(json.dumps(task).encode('utf-8'))
-                response = json.loads(worker1_socket.recv(4096).decode('utf-8'))
-                worker1_socket.close()
+                self.send_large_data(worker1_socket,task)
+                response = json.loads(worker1_socket.recv(8192).decode('utf-8'))
+                worker1_socket.close() 
 
             conn.sendall(json.dumps(response).encode('utf-8'))  # Responder al cliente
+            conn.sendall(b'__END__')  
         except Exception as e:
             print(f"[Worker 0] Error: {e}")
         finally:
