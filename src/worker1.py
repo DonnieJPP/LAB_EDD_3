@@ -12,6 +12,14 @@ class Worker1:
         self.server_socket.listen(1)
         print("[Worker 1] Iniciado y esperando conexiones...")
 
+    def send_large_data(socket, data):
+        try:
+            serialized_data = json.dumps(data).encode('utf-8')
+            socket.sendall(serialized_data)
+            socket.sendall(b'__END__')  # Marcador para indicar el fin de los datos
+        except Exception as e:
+            print(f"[Worker] Error al enviar datos: {e}")
+
     def sort_vector(self, vector, algorithm, time_limit):
         start_time = time.time()
         sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
@@ -26,24 +34,27 @@ class Worker1:
             return False, elapsed_time
         return True, elapsed_time
 
+    def handle_client(self, conn):
+        try:
+            task = self.recv_large_data(conn)
+            vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
+            success, elapsed_time = self.sort_vector(vector, algorithm, time_limit)
+
+            response = {
+                "vector": vector,
+                "time": elapsed_time,
+                "worker_id": 1 if success else -1
+            }
+            conn.sendall(json.dumps(response).encode('utf-8'))
+        except Exception as e:
+            print(f"[Worker 1] Error: {e}")
+        finally:
+            conn.close()
+
     def run(self):
         while True:
             conn, _ = self.server_socket.accept()
-            try:
-                task = json.loads(conn.recv(4096).decode('utf-8'))
-                vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
-                success, elapsed_time = self.sort_vector(vector, algorithm, time_limit)
-
-                response = {
-                    "vector": vector,
-                    "time": elapsed_time,
-                    "worker_id": 1 if success else -1
-                }
-                conn.sendall(json.dumps(response).encode('utf-8'))
-            except Exception as e:
-                print(f"[Worker 1] Error: {e}")
-            finally:
-                conn.close()
+            threading.Thread(target=self.handle_client, args=(conn,)).start()
 
 if __name__ == '__main__':
     Worker1().run()

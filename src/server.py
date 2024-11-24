@@ -10,10 +10,6 @@ MAX_WORKERS = CONFIG_PARAMS['SERVER_MAX_WORKERS']
 workers = []  # Lista para registrar las conexiones de workers
 
 def handle_worker(conn, addr, worker_id):
-    """
-    Maneja la comunicación con un worker específico.
-    """
-    print(f"[Servidor] Worker {worker_id} conectado desde {addr}")
     try:
         while True:
             task = input(f"[Servidor] Ingresa la tarea para el Worker {worker_id} (o 'exit' para finalizar): ")
@@ -28,10 +24,11 @@ def handle_worker(conn, addr, worker_id):
                 print(f"[Servidor] Worker {worker_id} desconectado.")
                 break
             print(f"[Servidor] Resultado del Worker {worker_id}: {result.decode('utf-8')}")
-    except Exception as e:
-        print(f"[Servidor] Error con Worker {worker_id}: {e}")
+    except socket.error as e:
+        print(f"[Servidor] Error de socket con Worker {worker_id}: {e}")
     finally:
         conn.close()
+        print(f"[Servidor] Conexión con Worker {worker_id} cerrada.")
 
 def start_server():
     """
