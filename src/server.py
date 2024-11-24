@@ -3,43 +3,44 @@ import threading
 import json
 from config import CONFIG_PARAMS
 
-# Configuration Parameters
-IP_ADDRESS = CONFIG_PARAMS['SERVER_IP_ADDRESS']
-PORT = CONFIG_PARAMS['SERVER_PORT']
-
-
-def handle_client(conn, workers):
+def handle_client(conn):
     try:
-        data = conn.recv(2048)
-        if not data:
-            return
+        buffer = b""
+        while True:
+            part = conn.recv(4096)
+            if not part:
+                break
+            buffer += part
+        task = json.loads(buffer.decode('utf-8'))
+        print("[Servidor] Recibió tarea del cliente.")
 
-        task = json.loads(data.decode('utf-8'))
         worker_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        worker_sock.connect(("127.0.0.1", workers[0]))
+        worker_sock.connect((CONFIG_PARAMS['WORKER_0_IP'], CONFIG_PARAMS['WORKER_0_PORT']))
+        worker_sock.sendall(json.dumps(task).encode('utf-8'))
 
-        worker_sock.sendall(data)
-        result = worker_sock.recv(2048)
+        result = b""
+        while True:
+            part = worker_sock.recv(4096)
+            if not part:
+                break
+            result += part
         conn.sendall(result)
-
         worker_sock.close()
+        print("[Servidor] Resultado enviado al cliente.")
     except Exception as e:
-        print("Error manejando cliente:", e)
+        print("[Servidor] Error:", e)
     finally:
         conn.close()
+
 def server():
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Permitir reutilización de la dirección
-    server_sock.bind(('127.0.0.1', 8081))  # Dirección y puerto correctos
-    server_sock.listen(1)
-
-    print("Esperando conexiones...")
-    conn, addr = server_sock.accept()
-    print(f"Conexión establecida con {addr}")
-    
-    # Lógica de procesamiento posterior
-    conn.close()
-    server_sock.close()
+    server_sock.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
+    server_sock.listen(5)
+    print("[Servidor] Esperando conexiones...")
+    while True:
+        conn, addr = server_sock.accept()
+        print(f"[Servidor] Conexión establecida con {addr}")
+        threading.Thread(target=handle_client, args=(conn,)).start()
 
 if __name__ == '__main__':
     server()

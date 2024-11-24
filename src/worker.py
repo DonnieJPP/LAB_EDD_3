@@ -1,61 +1,109 @@
 import socket
 import json
 import time
-from config import CONFIG_PARAMS
-from ordenamientos import mergesort, quicksort, heapsort
+import sys
+import multiprocessing
+from ordenamientos import merge_sort, heap_sort, quick_sort
 
 
 def sort_task(task, time_limit):
-    arr = task["vector"]
-    algo = task["algorithm"]
-    start = time.time()
+    """
+    Ejecuta el algoritmo de ordenamiento y mide el tiempo de ejecución.
+    """
+    vector = task["vector"]
+    algorithm = task["algorithm"]
 
-    # Aplicar el algoritmo de ordenamiento correspondiente
-    if algo == "mergesort":
-        mergesort(arr)
-    elif algo == "quicksort":
-        arr[:] = quicksort(arr)
-    elif algo == "heapsort":
-        arr[:] = heapsort(arr)
+    start_time = time.time()
+    if algorithm == "mergesort":
+        merge_sort(vector)
+    elif algorithm == "heapsort":
+        heap_sort(vector)
+    elif algorithm == "quicksort":
+        quick_sort(vector, 0, len(vector) - 1)
 
-    elapsed = time.time() - start
-    return elapsed <= time_limit, arr, elapsed
+    elapsed_time = time.time() - start_time
+    return elapsed_time <= time_limit, vector, elapsed_time
 
-# Función principal para cada worker
-def worker(port, next_port=None):
-    # Crear un socket para el worker
+
+def worker(port, next_port=None, worker_id=0):
+    """
+    Función principal para el worker.
+    """
+    worker_name = f"worker_{worker_id}"  # Nombre único del worker
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("0.0.0.0", port))  # Escuchar en todas las interfaces en el puerto dado
+    sock.bind(("127.0.0.1", port))
     sock.listen(1)
-    print(f"Worker activo en el puerto {port}...")
+    print(f"[{worker_name}] Activo y esperando tareas en el puerto {port}...")
 
     while True:
         conn, _ = sock.accept()
-        data = conn.recv(4096)
-        if not data:
-            continue
+        try:
+            buffer = b""
+            while True:
+                part = conn.recv(4096)
+                if not part:
+                    break
+                buffer += part
 
-        task = json.loads(data.decode('utf-8'))
-        print(f"Worker {port} recibió datos: {len(task['vector'])} elementos, {task['time']} segundos restantes")
+            task = json.loads(buffer.decode("utf-8"))
+            print(f"[{worker_name}] Tarea recibida con {len(task['vector'])} elementos.")
 
-        start_time = time.time()
-        success, sorted_vector, elapsed_time = sort_task(task, task["time"])
+            # Ejecutar tarea
+            success, sorted_vector, elapsed_time = sort_task(task, task["time"])
+            if success:
+                result = {"vector": sorted_vector, "time": elapsed_time}
+                conn.sendall(json.dumps(result).encode("utf-8"))
+                print(f"[{worker_name}] Tarea completada en {elapsed_time:.2f} segundos.")
+            elif next_port:
+                print(f"[{worker_name}] Tiempo agotado. Pasando al siguiente worker.")
+                next_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                next_sock.connect(("127.0.0.1", next_port))
+                next_task = {
+                    "algorithm": task["algorithm"],
+                    "time": task["time"],  # Mantener el mismo tiempo
+                    "vector": sorted_vector,
+                }
+                next_sock.sendall(json.dumps(next_task).encode("utf-8"))
+                next_sock.close()
+            else:
+                print(f"[{worker_name}] No hay siguiente worker. Reintentando...")
+                conn.sendall(json.dumps({"error": "No workers available."}).encode("utf-8"))
+        except Exception as e:
+            print(f"[{worker_name}] Error al procesar la tarea: {e}")
+        finally:
+            conn.close()
 
-        if success or not next_port:
-            result = {"vector": sorted_vector, "time": elapsed_time}
-            conn.sendall(json.dumps(result).encode('utf-8'))
-            print(f"Worker {port} completó la tarea en {elapsed_time:.2f} segundos")
-        else:
-            # Si el tiempo se agotó, pasar los datos al siguiente worker
-            remaining_time = task["time"] - elapsed_time
-            print(f"Tiempo agotado en Worker {port}. Enviando datos al siguiente worker {next_port}")
-            next_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            next_sock.connect((CONFIG_PARAMS['WORKER_1_IP'], CONFIG_PARAMS['WORKER_1_PORT']))  # Conectar a worker_1
-            next_task = {"algorithm": task["algorithm"], "time": remaining_time, "vector": sorted_vector}
-            next_sock.sendall(json.dumps(next_task).encode('utf-8'))
-            next_sock.close()
 
-        conn.close()
+def start_workers(worker_count, base_port):
+    """
+    Lanza automáticamente varios workers como procesos.
+    """
+    processes = []
+    for i in range(worker_count):
+        port = base_port + i
+        next_port = base_port + ((i + 1) % worker_count)  # Conexión cíclica
+        worker_id = i
+        print(f"Iniciando worker_{worker_id} en puerto {port}, conectado al puerto {next_port}.")
+        process = multiprocessing.Process(target=worker, args=(port, next_port, worker_id))
+        process.start()
+        processes.append(process)
+    return processes
 
-if __name__ == '__main__':
-    worker(CONFIG_PARAMS['WORKER_0_PORT'], CONFIG_PARAMS['WORKER_1_PORT'])
+
+if __name__ == "__main__":
+    WORKER_COUNT = 2  # Número de workers
+    BASE_PORT = 8082  # Puerto inicial
+
+    # Iniciar workers automáticamente
+    print(f"Iniciando {WORKER_COUNT} workers...")
+    processes = start_workers(WORKER_COUNT, BASE_PORT)
+
+    print("Sistema en ejecución. Presiona Ctrl+C para detener.")
+    try:
+        while True:
+            time.sleep(1)  # Mantén el script principal vivo
+    except KeyboardInterrupt:
+        print("\nDeteniendo todos los workers...")
+        for p in processes:
+            p.terminate()
+        print("Sistema detenido.")
