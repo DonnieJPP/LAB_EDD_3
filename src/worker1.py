@@ -1,84 +1,80 @@
 import socket
-import threading
-import time
 import json
+import time
 from config import CONFIG_PARAMS
 from sorting_algorithms import merge_sort, heap_sort, quick_sort
 
-stop_flag = threading.Event()
+def recv_large_data(socket):
+    buffer = b""
+    while True:
+        chunk = socket.recv(8192)
+        if not chunk:
+            print("[Worker 1] Conexión cerrada inesperadamente.")
+            return None
+        buffer += chunk
+        if b'__END__' in buffer:
+            buffer = buffer.split(b'__END__')[0]
+            break
 
-class Worker1:
-    def __init__(self):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_1_PORT']))
-        self.server_socket.listen(1)
-        print("[Worker 1] Iniciado y esperando conexiones...")
-
-    def send_large_data(socket, data):
-        try:
-            serialized_data = json.dumps(data).encode('utf-8')
-            socket.sendall(serialized_data)
-            socket.sendall(b'__END__')  # Marcador para indicar el fin de los datos
-        except Exception as e:
-            print(f"[Worker] Error al enviar datos: {e}")
-
-    def recv_large_data(conn):
-        """Recibe datos grandes en fragmentos."""
-        buffer = b""
-        while True:
-            chunk = conn.recv(8192)
-            if b'__END__' in chunk:
-                buffer += chunk.split(b'__END__')[0]
-                break
-            buffer += chunk
+    try:
         return json.loads(buffer.decode('utf-8'))
+    except json.JSONDecodeError as e:
+        print(f"[Worker 1] Error al decodificar JSON: {e}")
+        print(f"[Worker 1] Datos recibidos: {buffer}")
+        return None
 
-    def sort_vector(self, vector, algorithm, time_limit):
-        stop_flag.clear()
-        start_time = time.time()
-        sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
+def send_large_data(socket, data):
+    try:
+        serialized_data = json.dumps(data).encode('utf-8')
+        socket.sendall(serialized_data + b'__END__')
+    except Exception as e:
+        print(f"[Worker 1] Error al enviar datos: {e}")
 
-        sort_thread = threading.Thread(target=sort_func, args=(vector,))
-        sort_thread.start()
-        sort_thread.join(timeout=time_limit)
+def timed_sort(algorithm, vector, time_limit):
+    start_time = time.time()
+    if algorithm == 'mergesort':
+        merge_sort(vector, start_time, time_limit)
+    elif algorithm == 'heapsort':
+        heap_sort(vector, start_time, time_limit)
+    elif algorithm == 'quicksort':
+        vector = quick_sort(vector, start_time, time_limit)
+    return vector
 
-        elapsed_time = time.time() - start_time
-        if sort_thread.is_alive():
-            print("[Worker 1] Tiempo límite alcanzado. Delegando al Worker 1")
-            stop_flag.set()
-            sort_thread.join()
-            return False, vector, elapsed_time
-        return True, vector,time.time() - start_time
+def worker(worker_id, port):
+    worker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    worker_socket.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], port))
+    worker_socket.listen(5)
+    print(f"[Worker {worker_id}] Esperando conexiones...")
 
-    def handle_worker(self, conn):
+    while True:
+        client_socket, addr = worker_socket.accept()
+        print(f"[Worker {worker_id}] Conexión aceptada de {addr}")
         try:
-            task = self.recv_large_data(conn)
-            vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
-            print(f"[Worker 1] Recibida tarea con {len(vector)} elementos, algoritmo: {algorithm}")
-            success, vector ,elapsed_time = self.sort_vector(vector, algorithm, time_limit)
-            if success:
-                response = {"vector": vector, "time": elapsed_time, "worker_id": 1}
-            else:
-                # Delegar a Worker 0
-                print("[Worker 1] Tiempo límite alcanzado. Devolviendo a Worker 0.")
-                response = json.loads(worker0_socket.recv(8192).decode('utf-8'))
-                worker0_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                worker0_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_0_PORT']))
-                self.send_large_data(worker0_socket, response)
-                worker0_socket.close() 
-                return
+            data = recv_large_data(client_socket)
+            if data:
+                algorithm = data['algorithm']
+                time_limit = data['time_limit']
+                vector = data['vector']
 
-            conn.sendall(json.dumps(response).encode('utf-8'))  # Responder al cliente
-            conn.sendall(b'__END__')  
+                print(f"[Worker {worker_id}] Datos recibidos: algoritmo={algorithm}, tiempo límite={time_limit}, vector (primeros 10 elementos)={vector[:10]}")
+
+                start_time = time.time()
+                vector = timed_sort(algorithm, vector, time_limit)
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+
+                response = {
+                    'vector': vector,
+                    'time': elapsed_time,
+                    'worker_id': worker_id
+                }
+                send_large_data(client_socket, response)
         except Exception as e:
-            print(f"[Worker 1] Error: {e}")
+            print(f"[Worker {worker_id}] Error: {e}")
         finally:
-            conn.close()
-
-    def run(self):
-        while True:
-            conn, address = self.server_socket.accept()
-            threading.Thread(target=self.handle_worker, args=(conn,)).start()
+            client_socket.close()
 
 if __name__ == '__main__':
-    Worker1().run()
+    worker_id = 1
+    port = CONFIG_PARAMS[f'WORKER_{worker_id}_PORT']
+    worker(worker_id, port)

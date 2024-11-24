@@ -4,16 +4,18 @@ from pathlib import Path
 from config import CONFIG_PARAMS
 
 def load_vector_from_file(file_path):
-    """Carga el vector desde un archivo de texto donde cada número está en una línea."""
     try:
         file_path = Path(file_path).resolve(strict=True)
         with file_path.open('r') as file:
-            vector = [int(line.strip()) for line in file]
+            vector = [int(line.strip()) for line in file if line.strip().isdigit()]
         return vector
-    except Exception as e:
-        print(f"[Cliente] Error al cargar el archivo '{file_path}': {e}")
+    except FileNotFoundError:
+        print(f"[Error] El archivo '{file_path}' no existe.")
         return []
-    
+    except ValueError as e:
+        print(f"[Error] Problema al convertir una línea en entero: {e}")
+        return []
+
 def send_large_data(socket, data):
     try:
         serialized_data = json.dumps(data).encode('utf-8')
@@ -25,13 +27,13 @@ def recv_large_data(socket):
     buffer = b""
     while True:
         chunk = socket.recv(8192)
-        if not chunk:  # Verifica si la conexión se cerró abruptamente
+        if not chunk:
             print("[Cliente] Conexión cerrada inesperadamente.")
-            return None  # Manejo de error
-        if b'__END__' in chunk:
-            buffer += chunk.replace(b'__END__', b'')
-            break
+            return None
         buffer += chunk
+        if b'__END__' in buffer:
+            buffer = buffer.split(b'__END__')[0]
+            break
 
     try:
         return json.loads(buffer.decode('utf-8'))
@@ -70,10 +72,7 @@ def client():
             file_path = Path(__file__).parent / "data" / "ejemplo.txt"
             vector = load_vector_from_file(file_path)
             if not vector:
-                print("[Cliente] Error al cargar el archivo 'ejemplo.txt'. Verifique su contenido o existencia.")
-                continue
-
-            if not vector:
+                print("[Cliente] Error al cargar el archivo 'Ejemplo.txt'. Verifique su contenido o existencia.")
                 continue
 
             try:
@@ -86,11 +85,14 @@ def client():
             print("[Cliente] Enviando tarea a Worker 0...")
             send_large_data(client_socket, task)
 
-            response = client_socket.recv(9192)
-            result = json.loads(response.decode('utf-8'))
-            print(f"\n[Cliente] Vector ordenado (primeros 10 elementos): {result['vector'][:10]}")
-            print(f"[Cliente] Tiempo total: {result['time']} segundos")
-            print(f"[Cliente] Worker que completó: Worker {result['worker_id']}")
+            response = recv_large_data(client_socket)
+            if response is None:
+                print("[Cliente] No se recibió respuesta del servidor.")
+                continue
+
+            print(f"\n[Cliente] Vector ordenado (primeros 1000 elementos): {response['vector'][:1000]}")
+            print(f"[Cliente] Tiempo total: {response['time']} segundos")
+            print(f"[Cliente] Worker que completó: Worker {response['worker_id']}")
 
     except Exception as e:
         print(f"[Cliente] Error: {e}")

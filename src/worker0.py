@@ -1,85 +1,80 @@
 import socket
-import threading
-import time
 import json
-from client import recv_large_data
+import time
 from config import CONFIG_PARAMS
 from sorting_algorithms import merge_sort, heap_sort, quick_sort
 
-stop_flag = threading.Event()
+def recv_large_data(socket):
+    buffer = b""
+    while True:
+        chunk = socket.recv(8192)
+        if not chunk:
+            print("[Worker 0] Conexión cerrada inesperadamente.")
+            return None
+        buffer += chunk
+        if b'__END__' in buffer:
+            buffer = buffer.split(b'__END__')[0]
+            break
 
-class Worker0:
-    def __init__(self):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_0_PORT']))
-        self.server_socket.listen(1)
-        print("[Worker 0] Iniciado y esperando conexiones...")
+    try:
+        return json.loads(buffer.decode('utf-8'))
+    except json.JSONDecodeError as e:
+        print(f"[Worker 0] Error al decodificar JSON: {e}")
+        print(f"[Worker 0] Datos recibidos: {buffer}")
+        return None
 
-    def recv_large_data(conn):
-        """Recibe un mensaje JSON largo desde un socket, en múltiples fragmentos."""
-        buffer = b""
-        while True:
-            chunk = conn.recv(8192)
-            if b'__END__' in chunk:
-                buffer += chunk.split(b'__END__')[0]
-                break
-            buffer += chunk
-        return json.loads(buffer.decode('utf-8')) 
+def send_large_data(socket, data):
+    try:
+        serialized_data = json.dumps(data).encode('utf-8')
+        socket.sendall(serialized_data + b'__END__')
+    except Exception as e:
+        print(f"[Worker 0] Error al enviar datos: {e}")
 
-    def send_large_data(self, socket, data):
-      """Envía datos grandes en fragmentos."""
-      serialized_data = json.dumps(data).encode('utf-8')
-      socket.sendall(serialized_data)
-      socket.sendall(b'__END__')   
+def timed_sort(algorithm, vector, time_limit):
+    start_time = time.time()
+    if algorithm == 'mergesort':
+        merge_sort(vector, start_time, time_limit)
+    elif algorithm == 'heapsort':
+        heap_sort(vector, start_time, time_limit)
+    elif algorithm == 'quicksort':
+        vector = quick_sort(vector, start_time, time_limit)
+    return vector
 
-    def sort_vector(self, vector, algorithm, time_limit):
-        stop_flag.clear()
-        start_time = time.time()
-        sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
+def worker(worker_id, port):
+    worker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    worker_socket.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], port))
+    worker_socket.listen(5)
+    print(f"[Worker {worker_id}] Esperando conexiones...")
 
-        sort_thread = threading.Thread(target=sort_func, args=(vector,))
-        sort_thread.start()
-        sort_thread.join(timeout=time_limit)
-
-        elapsed_time = time.time() - start_time
-        if sort_thread.is_alive():
-            stop_flag.set()
-            print("[Worker 0] Tiempo límite alcanzado. Delegando a Worker 1.")
-            sort_thread.join()
-            return False, vector, elapsed_time
-        return True, vector,time.time() - start_time
-
-    def handle_client(self, conn):
+    while True:
+        client_socket, addr = worker_socket.accept()
+        print(f"[Worker {worker_id}] Conexión aceptada de {addr}")
         try:
-            # Usa recv_large_data para recibir tareas extensas
-            task = recv_large_data(conn)
-            vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
-            print(f"[Worker 0] Recibida tarea con {len(vector)} elementos, algoritmo: {algorithm}")
+            data = recv_large_data(client_socket)
+            if data:
+                algorithm = data['algorithm']
+                time_limit = data['time_limit']
+                vector = data['vector']
 
-            success, vector, elapsed_time = self.sort_vector(vector, algorithm, time_limit)
-            if success:
-                response = {"vector": vector, "time": elapsed_time, "worker_id": 0}
-            else:
-                # Delegar a Worker 1
-                task["vector"] = vector
-                worker1_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                worker1_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_1_PORT']))
-                self.send_large_data(worker1_socket,task)
-                response = json.loads(worker1_socket.recv(8192).decode('utf-8'))
-                worker1_socket.close() 
+                print(f"[Worker {worker_id}] Datos recibidos: algoritmo={algorithm}, tiempo límite={time_limit}, vector (primeros 10 elementos)={vector[:10]}")
 
-            conn.sendall(json.dumps(response).encode('utf-8'))  # Responder al cliente
-            conn.sendall(b'__END__')  
+                start_time = time.time()
+                vector = timed_sort(algorithm, vector, time_limit)
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+
+                response = {
+                    'vector': vector,
+                    'time': elapsed_time,
+                    'worker_id': worker_id
+                }
+                send_large_data(client_socket, response)
         except Exception as e:
-            print(f"[Worker 0] Error: {e}")
+            print(f"[Worker {worker_id}] Error: {e}")
         finally:
-            conn.close()
-
-
-    def run(self):
-        while True:
-            conn, _ = self.server_socket.accept()  # Espera por conexiones
-            threading.Thread(target=self.handle_client, args=(conn,)).start()
+            client_socket.close()
 
 if __name__ == '__main__':
-    Worker0().run()
+    worker_id = 0
+    port = CONFIG_PARAMS[f'WORKER_{worker_id}_PORT']
+    worker(worker_id, port)

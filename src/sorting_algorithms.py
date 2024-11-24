@@ -1,88 +1,81 @@
 import time
 
-def merge_sort(arr):
+def merge_sort(arr, start_time, time_limit):
+    if time.time() - start_time > time_limit:
+        return
     if len(arr) > 1:
         mid = len(arr) // 2
-        left_half = arr[:mid]
-        right_half = arr[mid:]
+        L = arr[:mid]
+        R = arr[mid:]
 
-        merge_sort(left_half)
-        merge_sort(right_half)
-
+        merge_sort(L, start_time, time_limit)
+        merge_sort(R, start_time, time_limit)
 
         i = j = k = 0
-        while i < len(left_half) and j < len(right_half):
-            if left_half[i] < right_half[j]:
-                arr[k] = left_half[i]
+
+        while i < len(L) and j < len(R):
+            if time.time() - start_time > time_limit:
+                return
+            if L[i] < R[j]:
+                arr[k] = L[i]
                 i += 1
             else:
-                arr[k] = right_half[j]
+                arr[k] = R[j]
                 j += 1
             k += 1
 
-
-        while i < len(left_half):
-            arr[k] = left_half[i]
+        while i < len(L):
+            if time.time() - start_time > time_limit:
+                return
+            arr[k] = L[i]
             i += 1
             k += 1
 
-        while j < len(right_half):
-            arr[k] = right_half[j]
+        while j < len(R):
+            if time.time() - start_time > time_limit:
+                return
+            arr[k] = R[j]
             j += 1
             k += 1
 
-def heapify(arr, n, i):
-    
-    largest = i  # Inicializar el nodo raíz como el más grande
-    left = 2 * i + 1  # Índice del hijo izquierdo
-    right = 2 * i + 2  # Índice del hijo derecho
+def heap_sort(arr, start_time, time_limit):
+    def heapify(arr, n, i):
+        if time.time() - start_time > time_limit:
+            return
+        largest = i
+        l = 2 * i + 1
+        r = 2 * i + 2
 
-    # Comparar el hijo izquierdo con el nodo raíz
-    if left < n and arr[left] > arr[largest]:
-        largest = left
+        if l < n and arr[i] < arr[l]:
+            largest = l
 
-    # Comparar el hijo derecho con el nodo más grande actual
-    if right < n and arr[right] > arr[largest]:
-        largest = right
+        if r < n and arr[largest] < arr[r]:
+            largest = r
 
-    # Si el nodo raíz no es el más grande, intercambiar y continuar
-    if largest != i:
-        arr[i], arr[largest] = arr[largest], arr[i]  # Intercambiar
-        heapify(arr, n, largest)  # Llamar recursivamente
+        if largest != i:
+            arr[i], arr[largest] = arr[largest], arr[i]
+            heapify(arr, n, largest)
 
-def heap_sort(arr):
-    
     n = len(arr)
-
-    # Construir el heap máximo
     for i in range(n // 2 - 1, -1, -1):
+        if time.time() - start_time > time_limit:
+            return
         heapify(arr, n, i)
 
-    # Extraer elementos del heap uno por uno
-    for i in range(n - 1, 0, -1):
-        arr[i], arr[0] = arr[0], arr[i]  # Mover la raíz al final
-        heapify(arr, i, 0)  # Llamar heapify para el subárbol reducido
+    for i in range(n-1, 0, -1):
+        if time.time() - start_time > time_limit:
+            return
+        arr[i], arr[0] = arr[0], arr[i]
+        heapify(arr, i, 0)
 
-def quick_sort_helper(arr,low, high):
-   pivot = arr[high]
-   i = low - 1
-   for j in range(low, high):
-      if arr[j] <= pivot:
-         i = i + 1
-         arr[i], arr[j] = arr[j], arr[i]
-   arr[i + 1], arr[high] = arr[high], arr[i + 1]
-   return (i + 1)
-
-def quick_sort(arr,low,high):
-   if(low < high):
-      pi = quick_sort_helper(arr, low, high)
-      quick_sort(arr, low, pi - 1)
-      quick_sort(arr, pi + 1, high)
-
-def tiempo_ejecución(ordenamiento,vector, t):
-    vectorB = vector.copy()
-    inicio = time.time()
-    while tiempo<=t:
-     tiempo_actual = time.time()
-     tiempo = tiempo_actual - inicio
-     ordenamiento(vectorB)
+def quick_sort(arr, start_time, time_limit):
+    if time.time() - start_time > time_limit:
+        return arr
+    if len(arr) <= 1:
+        return arr
+    else:
+        pivot = arr[len(arr) // 2]
+        left = [x for x in arr if x < pivot]
+        middle = [x for x in arr if x == pivot]
+        right = [x for x in arr if x > pivot]
+        return quick_sort(left, start_time, time_limit) + middle + quick_sort(right, start_time, time_limit)

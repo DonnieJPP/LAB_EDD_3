@@ -1,50 +1,76 @@
 import socket
-import threading
 import json
 from config import CONFIG_PARAMS
 
-IP_ADDRESS = CONFIG_PARAMS['SERVER_IP_ADDRESS']
-PORT = CONFIG_PARAMS['SERVER_PORT']
-MAX_WORKERS = CONFIG_PARAMS['SERVER_MAX_WORKERS']
-
-workers = []  # Lista para registrar las conexiones de workers
-
-def handle_worker(conn, addr, worker_id):
+def handle_client(client_socket):
     try:
-        while True:
-            task = input(f"[Servidor] Ingresa la tarea para el Worker {worker_id} (o 'exit' para finalizar): ")
-            if task.lower() == CONFIG_PARAMS['EXIT_MESSAGE']:
-                print(f"[Servidor] Finalizando conexión con Worker {worker_id}")
-                conn.sendall(CONFIG_PARAMS['EXIT_MESSAGE'].encode('utf-8'))
-                break
+        data = recv_large_data(client_socket)
+        if data:
+            algorithm = data.get('algorithm')
+            time_limit = data.get('time_limit')
+            vector = data.get('vector')
 
-            # Esperar respuesta del worker
-            result = conn.recv(8192)
-            if not result:
-                print(f"[Servidor] Worker {worker_id} desconectado.")
-                break
-            print(f"[Servidor] Resultado del Worker {worker_id}: {result.decode('utf-8')}")
-    except socket.error as e:
-        print(f"[Servidor] Error de socket con Worker {worker_id}: {e}")
+            print(f"[Servidor] Datos recibidos: algoritmo={algorithm}, tiempo límite={time_limit}, vector (primeros 10 elementos)={vector[:10]}")
+
+            # Enviar tarea al primer worker
+            worker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            worker_socket.connect((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_0_PORT']))
+            send_large_data(worker_socket, data)
+
+            # Recibir respuesta del worker
+            response = recv_large_data(worker_socket)
+            worker_socket.close()
+
+            # Enviar respuesta al cliente
+            send_large_data(client_socket, response)
+    except Exception as e:
+        print(f"[Servidor] Error: {e}")
     finally:
-        conn.close()
-        print(f"[Servidor] Conexión con Worker {worker_id} cerrada.")
+        client_socket.close()
 
-def start_server():
-    """
-    Inicia el servidor y espera conexiones de los workers.
-    """
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((IP_ADDRESS, PORT))
-    server.listen(MAX_WORKERS)
-    print(f"[Servidor] Esperando hasta {MAX_WORKERS} workers en {IP_ADDRESS}:{PORT}...")
+def recv_large_data(socket):
+    buffer = b""
+    while True:
+        chunk = socket.recv(8192)
+        if not chunk:
+            print("[Servidor] Conexión cerrada inesperadamente.")
+            return None
+        buffer += chunk
+        if b'__END__' in buffer:
+            buffer = buffer.split(b'__END__')[0]
+            break
 
-    worker_id = 0
-    while len(workers) < MAX_WORKERS:
-        conn, addr = server.accept()
-        workers.append(conn)
-        threading.Thread(target=handle_worker, args=(conn, addr, worker_id)).start()
-        worker_id += 1
+    try:
+        return json.loads(buffer.decode('utf-8'))
+    except json.JSONDecodeError as e:
+        print(f"[Servidor] Error al decodificar JSON: {e}")
+        print(f"[Servidor] Datos recibidos: {buffer}")
+        return None
+
+def send_large_data(socket, data):
+    try:
+        serialized_data = json.dumps(data).encode('utf-8')
+        socket.sendall(serialized_data + b'__END__')
+    except Exception as e:
+        print(f"[Servidor] Error al enviar datos: {e}")
+
+def server():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
+    server_socket.listen(5)
+    print("[Servidor] Esperando conexiones...")
+
+    # Esperar conexiones de los workers
+    worker_sockets = []
+    for i in range(CONFIG_PARAMS['SERVER_MAX_WORKERS']):
+        worker_socket, addr = server_socket.accept()
+        print(f"[Servidor] Conexión aceptada de Worker {i} en {addr}")
+        worker_sockets.append(worker_socket)
+
+    while True:
+        client_socket, addr = server_socket.accept()
+        print(f"[Servidor] Conexión aceptada de {addr}")
+        handle_client(client_socket)
 
 if __name__ == '__main__':
-    start_server()
+    server()
