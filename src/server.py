@@ -3,44 +3,51 @@ import threading
 import json
 from config import CONFIG_PARAMS
 
-def handle_client(conn):
+IP_ADDRESS = CONFIG_PARAMS['SERVER_IP_ADDRESS']
+PORT = CONFIG_PARAMS['SERVER_PORT']
+MAX_WORKERS = CONFIG_PARAMS['SERVER_MAX_WORKERS']
+
+workers = []  # Lista para registrar las conexiones de workers
+
+def handle_worker(conn, addr, worker_id):
+    """
+    Maneja la comunicación con un worker específico.
+    """
+    print(f"[Servidor] Worker {worker_id} conectado desde {addr}")
     try:
-        buffer = b""
         while True:
-            part = conn.recv(4096)
-            if not part:
+            task = input(f"[Servidor] Ingresa la tarea para el Worker {worker_id} (o 'exit' para finalizar): ")
+            if task.lower() == CONFIG_PARAMS['EXIT_MESSAGE']:
+                print(f"[Servidor] Finalizando conexión con Worker {worker_id}")
+                conn.sendall(CONFIG_PARAMS['EXIT_MESSAGE'].encode('utf-8'))
                 break
-            buffer += part
-        task = json.loads(buffer.decode('utf-8'))
-        print("[Servidor] Recibió tarea del cliente.")
 
-        worker_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        worker_sock.connect((CONFIG_PARAMS['WORKER_0_IP'], CONFIG_PARAMS['WORKER_0_PORT']))
-        worker_sock.sendall(json.dumps(task).encode('utf-8'))
-
-        result = b""
-        while True:
-            part = worker_sock.recv(4096)
-            if not part:
+            # Esperar respuesta del worker
+            result = conn.recv(4096)
+            if not result:
+                print(f"[Servidor] Worker {worker_id} desconectado.")
                 break
-            result += part
-        conn.sendall(result)
-        worker_sock.close()
-        print("[Servidor] Resultado enviado al cliente.")
+            print(f"[Servidor] Resultado del Worker {worker_id}: {result.decode('utf-8')}")
     except Exception as e:
-        print("[Servidor] Error:", e)
+        print(f"[Servidor] Error con Worker {worker_id}: {e}")
     finally:
         conn.close()
 
-def server():
-    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.bind((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['SERVER_PORT']))
-    server_sock.listen(5)
-    print("[Servidor] Esperando conexiones...")
-    while True:
-        conn, addr = server_sock.accept()
-        print(f"[Servidor] Conexión establecida con {addr}")
-        threading.Thread(target=handle_client, args=(conn,)).start()
+def start_server():
+    """
+    Inicia el servidor y espera conexiones de los workers.
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((IP_ADDRESS, PORT))
+    server.listen(MAX_WORKERS)
+    print(f"[Servidor] Esperando hasta {MAX_WORKERS} workers en {IP_ADDRESS}:{PORT}...")
+
+    worker_id = 0
+    while len(workers) < MAX_WORKERS:
+        conn, addr = server.accept()
+        workers.append(conn)
+        threading.Thread(target=handle_worker, args=(conn, addr, worker_id)).start()
+        worker_id += 1
 
 if __name__ == '__main__':
-    server()
+    start_server()
