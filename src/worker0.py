@@ -33,12 +33,11 @@ def recv_large_data(socket):
         print(f"[Worker 0] Error al decodificar datos: {e}")
         return None
 
-def process_task(data, progress, algorithm, time_limit, task_dict):
+def process_task(data, progress, algorithm, time_limit, task_dict,start_time):
     """
     Procesa la tarea utilizando el algoritmo de ordenamiento.
     """
-    global start_time 
-    start_time = time.time()
+    
     print(f"[Worker 0] Iniciando procesamiento con algoritmo: {algorithm}, progreso actual: {progress}")
     
     while time.time() - start_time <= time_limit:
@@ -112,11 +111,13 @@ def worker0_program():
             print(f"[Worker 0] Intento #{retry_count + 1} de procesar la tarea.")
             
             # Intento local en Worker 0
-            data, progress, task_dict, completed = process_task(data, progress, algorithm, time_limit, task_dict)
+             
+            start_time = time.time()
+            data, progress, task_dict, completed = process_task(data, progress, algorithm, time_limit, task_dict, start_time)
 
             if completed:
                 print("[Worker 0] Trabajo completado exitosamente.")
-                send_large_data(conn_client, {"vector": data, "time": time.time() - task['start_time'], "worker_id": 0})
+                send_large_data(conn_client, {"vector": data, "time": time.time() - start_time, "worker_id": 0})
                 conn_client.close()
                 return
 
