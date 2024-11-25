@@ -39,6 +39,8 @@ def process_task(data, progress, algorithm, time_limit, task_dict):
     Procesa la tarea utilizando el algoritmo de ordenamiento.
     """
     start_time = time.time()
+    print(f"[Worker 1] Iniciando procesamiento con algoritmo: {algorithm}, progreso actual: {progress}")
+    
     while time.time() - start_time < time_limit:
         if algorithm == "quicksort":
             data, progress, task_dict = quicksort_partial(data, progress, len(data) - 1, time_limit, task_dict)
@@ -46,10 +48,14 @@ def process_task(data, progress, algorithm, time_limit, task_dict):
             data, progress, task_dict = mergesort_partial(data, progress, time_limit, task_dict)
         elif algorithm == "heapsort":
             data, progress, task_dict = heapsort_partial(data, progress, time_limit, task_dict)
-
+        
+        print(f"[Worker 1] Progreso parcial: {progress}/{len(data)}, vector actual: {data[:10]}...")  # Muestra los primeros 10 elementos
+        
         if progress >= len(data):
+            print("[Worker 1] Ordenamiento completado localmente.")
             return data, progress, task_dict, True
-
+    
+    print("[Worker 1] Tiempo límite alcanzado. No se completó la tarea.")
     return data, progress, task_dict, False
 
 def worker1_program():
@@ -68,21 +74,23 @@ def worker1_program():
                 conn_worker_0.close()
                 continue
 
-            algorithm = task.get("algorithm")
-            data = task.get("data")
+            print(f"[Worker 1] Tarea recibida: Algoritmo: {task['algorithm']}, progreso: {task['progress']}")
+            algorithm = task["algorithm"]
+            data = task["data"]
             progress = task.get("progress", 0)
-            time_limit = task.get("time_limit")
+            time_limit = task["time_limit"]
             task_dict = task.get("task_dict", {"estado": True})
 
             data, progress, task_dict, completed = process_task(data, progress, algorithm, time_limit, task_dict)
             if completed:
+                print("[Worker 1] Trabajo completado. Enviando datos a Worker 0...")
                 send_large_data(conn_worker_0, {"data": data, "progress": progress, "completed": True, "worker": 1, "time_taken": time.time()})
             else:
-                print("[Worker 1] No se completó el trabajo. Devolviendo a Worker 0.")
+                print("[Worker 1] No se completó el trabajo. Devolviendo a Worker 0...")
                 send_large_data(conn_worker_0, {"data": data, "progress": progress, "completed": False})
 
             conn_worker_0.close()
 
+
 if __name__ == "__main__":
     worker1_program()
-
