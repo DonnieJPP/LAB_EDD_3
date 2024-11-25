@@ -80,8 +80,8 @@ class Worker0:
                     print("[Worker 0] Delegando tarea a Worker 1.")
                     self.delegate_to_worker1(task, conn)
                 elif source == "worker_1":
-                    print("[Worker 0] Tarea regresada desde Worker 1 no completada. Enviando error al cliente.")
-                    response = {"error": "No se pudo completar la tarea en ningún worker."}
+                    print("[Worker 0] Tarea regresada desde Worker 1 no completada.")
+                    self.delegate_to_worker1(task,conn)
                     conn.sendall(json.dumps(response).encode('utf-8'))
                 return
 
