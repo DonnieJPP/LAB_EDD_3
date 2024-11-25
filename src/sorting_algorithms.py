@@ -1,88 +1,110 @@
 import time
 
-def merge_sort(arr):
-    if len(arr) > 1:
-        mid = len(arr) // 2
-        left_half = arr[:mid]
-        right_half = arr[mid:]
+def quicksort_partial(arr, progress, high, time_limit, task_dict):
+    start_time = time.time()
+    stack = [(progress, high)]
 
-        merge_sort(left_half)
-        merge_sort(right_half)
+    while stack:
+        low, high = stack.pop()
+        if low < high:
+            p = partition(arr, low, high)
+            stack.append((low, p - 1))
+            stack.append((p + 1, high))
+
+        if time.time() - start_time >= time_limit:
+            print("[Quicksort] No alcanzó el tiempo límite.")
+            task_dict["estado"] = False
+            return arr, progress, task_dict
+
+    print("[Quicksort] Ordenamiento completado dentro del tiempo.")
+    task_dict["estado"] = True
+    return arr, len(arr), task_dict
 
 
-        i = j = k = 0
-        while i < len(left_half) and j < len(right_half):
-            if left_half[i] < right_half[j]:
-                arr[k] = left_half[i]
-                i += 1
-            else:
-                arr[k] = right_half[j]
-                j += 1
-            k += 1
-
-
-        while i < len(left_half):
-            arr[k] = left_half[i]
+def partition(arr, low, high):
+    pivot = arr[high]
+    i = low - 1
+    for j in range(low, high):
+        if arr[j] < pivot:
             i += 1
-            k += 1
+            arr[i], arr[j] = arr[j], arr[i]
+    arr[i + 1], arr[high] = arr[high], arr[i + 1]
+    return i + 1
 
-        while j < len(right_half):
-            arr[k] = right_half[j]
+
+def mergesort_partial(arr, progress, time_limit, task_dict):
+    start_time = time.time()
+    width = 1
+    n = len(arr)
+    while width < n:
+        for i in range(0, n, 2 * width):
+            left = arr[i:i + width]
+            right = arr[i + width:i + 2 * width]
+            arr[i:i + 2 * width] = merge(left, right)
+
+            if time.time() - start_time >= time_limit:
+                print("[Mergesort] No alcanzó el tiempo límite.")
+                task_dict["estado"] = False
+                return arr, progress, task_dict
+
+        width *= 2
+
+    print("[Mergesort] Ordenamiento completado dentro del tiempo.")
+    task_dict["estado"] = True
+    return arr, len(arr), task_dict
+
+
+def merge(left, right):
+    result = []
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i] < right[j]:
+            result.append(left[i])
+            i += 1
+        else:
+            result.append(right[j])
             j += 1
-            k += 1
+    result.extend(left[i:])
+    result.extend(right[j:])
+    return result
+
+
+def heapsort_partial(arr, progress, time_limit, task_dict):
+    start_time = time.time()
+    n = len(arr)
+
+    for i in range(n // 2 - 1, -1, -1):
+        heapify(arr, n, i)
+        if time.time() - start_time >= time_limit:
+            print("[Heapsort] No alcanzó el tiempo límite.")
+            task_dict["estado"] = False
+            return arr, progress, task_dict
+
+    for i in range(n - 1, 0, -1):
+        arr[i], arr[0] = arr[0], arr[i]
+        heapify(arr, i, 0)
+        progress += 1
+        if time.time() - start_time >= time_limit:
+            print("[Heapsort] No alcanzó el tiempo límite.")
+            task_dict["estado"] = False
+            return arr, progress, task_dict
+
+    print("[Heapsort] Ordenamiento completado dentro del tiempo.")
+    task_dict["estado"] = True
+    return arr, len(arr), task_dict
+
 
 def heapify(arr, n, i):
-    
-    largest = i  # Inicializar el nodo raíz como el más grande
-    left = 2 * i + 1  # Índice del hijo izquierdo
-    right = 2 * i + 2  # Índice del hijo derecho
+    largest = i
+    left = 2 * i + 1
+    right = 2 * i + 2
 
-    # Comparar el hijo izquierdo con el nodo raíz
     if left < n and arr[left] > arr[largest]:
         largest = left
 
-    # Comparar el hijo derecho con el nodo más grande actual
     if right < n and arr[right] > arr[largest]:
         largest = right
 
-    # Si el nodo raíz no es el más grande, intercambiar y continuar
     if largest != i:
-        arr[i], arr[largest] = arr[largest], arr[i]  # Intercambiar
-        heapify(arr, n, largest)  # Llamar recursivamente
-
-def heap_sort(arr):
-    
-    n = len(arr)
-
-    # Construir el heap máximo
-    for i in range(n // 2 - 1, -1, -1):
-        heapify(arr, n, i)
-
-    # Extraer elementos del heap uno por uno
-    for i in range(n - 1, 0, -1):
-        arr[i], arr[0] = arr[0], arr[i]  # Mover la raíz al final
-        heapify(arr, i, 0)  # Llamar heapify para el subárbol reducido
-
-def quick_sort_helper(arr,low, high):
-   pivot = arr[high]
-   i = low - 1
-   for j in range(low, high):
-      if arr[j] <= pivot:
-         i = i + 1
-         arr[i], arr[j] = arr[j], arr[i]
-   arr[i + 1], arr[high] = arr[high], arr[i + 1]
-   return (i + 1)
-
-def quick_sort(arr,low,high):
-   if(low < high):
-      pi = quick_sort_helper(arr, low, high)
-      quick_sort(arr, low, pi - 1)
-      quick_sort(arr, pi + 1, high)
-
-def tiempo_ejecución(ordenamiento,vector, t):
-    vectorB = vector.copy()
-    inicio = time.time()
-    while tiempo<=t:
-     tiempo_actual = time.time()
-     tiempo = tiempo_actual - inicio
-     ordenamiento(vectorB)
+        arr[i], arr[largest] = arr[largest], arr[i]
+        heapify(arr, n, largest)
