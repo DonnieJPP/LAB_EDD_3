@@ -7,7 +7,7 @@ def load_vector_from_file(file_path):
     try:
         file_path = Path(file_path).resolve(strict=True)
         with file_path.open('r') as file:
-            vector = [int(line.strip()) for line in file if line.strip().isdigit()]
+            vector = [float(line.strip()) for line in file if line.strip().isdigit()]
         return vector
     except FileNotFoundError:
         print(f"[Error] El archivo '{file_path}' no existe.")

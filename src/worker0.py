@@ -35,8 +35,7 @@ class Worker0:
 
     def send_large_data(self, conn, data):
         serialized_data = json.dumps(data).encode('utf-8')
-        conn.sendall(serialized_data)
-        conn.sendall(b'__END__')  # Marcamos el final del mensaje
+        conn.sendall(serialized_data + b'__END__')  # Marcamos el final del mensaje
 
     def sort_vector(self, vector, algorithm, time_limit):
         stop_flag.clear()
@@ -61,7 +60,8 @@ class Worker0:
             if task is None:
                 return  # Si hubo un error al recibir los datos, terminamos
 
-            source = task.get("source", "client")
+            source = task.get("source", "client")  # Por defecto, la tarea viene del cliente
+
             vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
             print(f"[Worker 0] Recibida tarea desde {source} con {len(vector)} elementos, algoritmo: {algorithm}")
 
@@ -77,7 +77,7 @@ class Worker0:
                     self.delegate_to_worker1(task, conn)
                 return
 
-            self.send_large_data(conn, response)
+            self.send_large_data(conn, response)  # Enviamos la respuesta al cliente o worker
         except Exception as e:
             print(f"[Worker 0] Error: {e}")
         finally:
@@ -87,11 +87,14 @@ class Worker0:
         try:
             print("[Worker 0] Conectando a Worker 1...")
             with socket.create_connection((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_1_PORT'])) as worker1_socket:
-                task["source"] = "worker_0"
+                task["source"] = "worker_0"  # Indicar la fuente de la tarea
                 self.send_large_data(worker1_socket, task)
+
+                # Recibe la respuesta del worker_1
                 response = self.recv_large_data(worker1_socket)
                 print(f"[Worker 0] Respuesta recibida de Worker 1: {response}")
-                self.send_large_data(conn, response)
+                if response:
+                    self.send_large_data(conn, response)  # Envía la respuesta al cliente
         except socket.timeout:
             print("[Worker 0] Tiempo de espera agotado al conectar con Worker 1.")
             response = {"error": "Worker 1 no respondió a tiempo"}
