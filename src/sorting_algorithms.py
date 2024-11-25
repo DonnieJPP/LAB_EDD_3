@@ -33,24 +33,41 @@ def partition(arr, low, high):
 
 
 def mergesort_partial(arr, progress, time_limit, task_dict):
+
     start_time = time.time()
-    width = 1
     n = len(arr)
+    width = 1
+
+    # Recupera la anchura actual y el índice basado en el progreso
+    if "width" in task_dict:
+        width = task_dict["width"]
+    if progress > 0:
+        while width < progress and width < n:
+            width *= 2
+
     while width < n:
-        for i in range(0, n, 2 * width):
+        for i in range(progress, n, 2 * width):
             left = arr[i:i + width]
             right = arr[i + width:i + 2 * width]
             arr[i:i + 2 * width] = merge(left, right)
+            
+            # Actualiza el progreso después de procesar esta sección
+            progress = i + 2 * width
 
+            # Verifica si se alcanzó el tiempo límite
             if time.time() - start_time >= time_limit:
-                print("[Mergesort] No alcanzó el tiempo límite.")
+                print("[Mergesort] Tiempo límite alcanzado.")
                 task_dict["estado"] = False
+                task_dict["width"] = width  # Guarda el nivel actual de anchura
                 return arr, progress, task_dict
-
+        
+        # Incrementa el nivel de anchura
         width *= 2
+        progress = 0  # Reinicia el índice al comienzo para la nueva anchura
 
-    print("[Mergesort] Ordenamiento completado dentro del tiempo.")
+    print("[Mergesort] Ordenamiento completado.")
     task_dict["estado"] = True
+    task_dict.pop("width", None)  # Limpia el nivel de anchura al finalizar
     return arr, len(arr), task_dict
 
 
