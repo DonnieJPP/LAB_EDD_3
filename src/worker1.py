@@ -9,6 +9,7 @@ def send_large_data(conn, data):
     try:
         serialized_data = json.dumps(data).encode('utf-8')
         conn.sendall(serialized_data + b'__END__')
+        print(f"[Worker 1] Datos enviados correctamente.")
     except Exception as e:
         print(f"[Worker 1] Error al enviar datos: {e}")
 
@@ -35,27 +36,23 @@ def recv_large_data(conn):
         return None
 
 def process_task(data, progress, algorithm, time_limit, task_dict):
-    """
-    Procesa la tarea utilizando el algoritmo de ordenamiento.
-    """
     start_time = time.time()
-    print(f"[Worker 1] Iniciando procesamiento con algoritmo: {algorithm}, progreso actual: {progress}")
-    
     while time.time() - start_time < time_limit:
+        print(f"[Worker 1] Progreso actual: {progress}, Tiempo transcurrido: {time.time() - start_time:.2f} s")
+        print(f"[Worker 1] Vector parcial: {data[:10]}")  # Mostrar los primeros 10 elementos para seguimiento
+
         if algorithm == "quicksort":
             data, progress, task_dict = quicksort_partial(data, progress, len(data) - 1, time_limit, task_dict)
         elif algorithm == "mergesort":
             data, progress, task_dict = mergesort_partial(data, progress, time_limit, task_dict)
         elif algorithm == "heapsort":
             data, progress, task_dict = heapsort_partial(data, progress, time_limit, task_dict)
-        
-        print(f"[Worker 1] Progreso parcial: {progress}/{len(data)}, vector actual: {data[:10]}...")  # Muestra los primeros 10 elementos
-        
+
         if progress >= len(data):
-            print("[Worker 1] Ordenamiento completado localmente.")
+            print(f"[Worker 1] Ordenamiento completado.")
             return data, progress, task_dict, True
-    
-    print("[Worker 1] Tiempo límite alcanzado. No se completó la tarea.")
+
+    print(f"[Worker 1] Tiempo límite alcanzado. Progreso actual: {progress}")
     return data, progress, task_dict, False
 
 def worker1_program():
@@ -90,7 +87,6 @@ def worker1_program():
                 send_large_data(conn_worker_0, {"data": data, "progress": progress, "completed": False})
 
             conn_worker_0.close()
-
 
 if __name__ == "__main__":
     worker1_program()

@@ -106,7 +106,7 @@ def worker0_program():
         time_limit = task.get("time_limit")
         task_dict = {"estado": True}  # Estado inicial
 
-        max_retries = 20  # Máximo de reintentos entre Worker 0 y Worker 1
+        max_retries = 50  # Máximo de reintentos entre Worker 0 y Worker 1
         retry_count = 0
         while retry_count < max_retries:
             print(f"[Worker 0] Intento #{retry_count + 1} de procesar la tarea.")
