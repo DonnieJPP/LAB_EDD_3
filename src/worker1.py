@@ -35,6 +35,13 @@ def send_large_data(conn, data):
     except Exception as e:
         print(f"[Worker 1] Error al enviar datos: {e}")
 
+def truncate_data(data, length=200):
+    """Función auxiliar para truncar los datos impresos."""
+    data_str = json.dumps(data)
+    if len(data_str) > length:
+        return data_str[:length] + '...'
+    return data_str
+
 def sort_vector(vector, algorithm, time_limit):
     start_time = time.time()
     stop_flag.clear()
@@ -63,7 +70,7 @@ def worker_1():
         try:
             task = recv_large_data(conn)
             if task:
-                print(f"[Worker 1] Tarea recibida: {task}")
+                print(f"[Worker 1] Tarea recibida: {truncate_data(task)}")
                 success, vector, elapsed_time = sort_vector(task['vector'], task['algorithm'], task['time_limit'])
                 if success:
                     # Conectar directamente al cliente y enviar la respuesta
