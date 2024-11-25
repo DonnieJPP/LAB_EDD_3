@@ -41,8 +41,9 @@ def process_task(data, progress, algorithm, time_limit, task_dict):
     """
     Procesa la tarea utilizando el algoritmo de ordenamiento.
     """
-    start_time = time.time()
-    while time.time() - start_time < time_limit:
+    global start_time 
+    start_time =  time.time()
+    while time.time() - start_time <= time_limit:
         if algorithm == "quicksort":
             data, progress, task_dict = quicksort_partial(data, progress, len(data) - 1, time_limit, task_dict)
         elif algorithm == "mergesort":
@@ -105,7 +106,7 @@ def worker0_program():
 
             if completed:
                 print("[Worker 0] Trabajo completado exitosamente.")
-                send_large_data(conn_client, {"vector": data, "time": time.time(), "worker_id": 0})
+                send_large_data(conn_client, {"vector": data, "time": time.time()-start_time, "worker_id": 0})
                 conn_client.close()
                 return
 
