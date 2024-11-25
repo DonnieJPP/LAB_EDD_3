@@ -7,10 +7,10 @@ from sorting_algorithms import merge_sort, heap_sort, quick_sort
 
 stop_flag = threading.Event()
 
-def recv_large_data(socket):
+def recv_large_data(conn):
     buffer = b""
     while True:
-        chunk = socket.recv(8192)
+        chunk = conn.recv(8192)
         if not chunk:
             print("[Worker 1] Conexión cerrada inesperadamente.")
             return None
@@ -26,28 +26,27 @@ def recv_large_data(socket):
         print(f"[Worker 1] Datos recibidos: {buffer}")
         return None
 
-def send_large_data(socket, data):
+def send_large_data(conn, data):
     try:
         serialized_data = json.dumps(data).encode('utf-8')
-        socket.sendall(serialized_data + b'__END__')
+        conn.sendall(serialized_data + b'__END__')
     except Exception as e:
         print(f"[Worker 1] Error al enviar datos: {e}")
 
 def sort_vector(vector, algorithm, time_limit):
     start_time = time.time()
     stop_flag.clear()
-    
-    # Iniciar el hilo de ordenamiento
+
     sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
-    sort_thread = threading.Thread(target=sort_func, args=(vector,start_time, time_limit))
+    sort_thread = threading.Thread(target=sort_func, args=(vector, start_time, time_limit))
     sort_thread.start()
     sort_thread.join(timeout=time_limit)
-    
+
     elapsed_time = time.time() - start_time
-    
-    if sort_thread.is_alive() and elapsed_time>time_limit:
+
+    if sort_thread.is_alive() and elapsed_time > time_limit:
         stop_flag.set()
-        print(f"[Worker 1 ] Tiempo límite alcanzado. Devolviendo tarea al otro worker.")
+        print(f"[Worker 1] Tiempo límite alcanzado. Devolviendo tarea al otro worker.")
         return False, vector, elapsed_time  # Indica que no se completó a tiempo
     return True, vector, elapsed_time
 
@@ -64,22 +63,13 @@ def worker_1():
             if task:
                 success, vector, elapsed_time = sort_vector(task['vector'], task['algorithm'], task['time_limit'])
                 if success:
-                    # Conectar directamente al cliente y enviar la respuesta
                     with socket.create_connection((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['CLIENT_PORT'])) as client_socket:
                         response = {'vector': vector, 'time': elapsed_time, 'worker_id': 1}
                         send_large_data(client_socket, response)
                         print("[Worker 1] Ordenamiento completado. Resultado enviado al cliente.")
                 else:
-                    # Devolver tarea al Worker 0
                     with socket.create_connection((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_0_PORT'])) as worker0_socket:
                         send_large_data(worker0_socket, task)
-                        print("[Worker 1] Tarea devuelta al Worker 0.")
-        except Exception as e:
-            print(f"[Worker 1] Error: {e}")
-        finally:
-            conn.close()
 
 if __name__ == '__main__':
-    worker_id = 1
-    port = CONFIG_PARAMS[f'WORKER_{worker_id}_PORT']
     worker_1()

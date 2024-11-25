@@ -2,7 +2,6 @@ import socket
 import threading
 import time
 import json
-from client import recv_large_data
 from config import CONFIG_PARAMS
 from sorting_algorithms import merge_sort, heap_sort, quick_sort
 
@@ -16,7 +15,6 @@ class Worker0:
         print("[Worker 0] Iniciado y esperando conexiones...")
 
     def recv_large_data(self, conn):
-        """Recibe un mensaje JSON largo desde un socket, en múltiples fragmentos."""
         buffer = b""
         while True:
             chunk = conn.recv(8192)
@@ -24,7 +22,7 @@ class Worker0:
                 print("[Worker 0] Error: Conexión cerrada inesperadamente.")
                 return None
             if b'__END__' in chunk:
-                buffer += chunk.split(b'__END__')[0]  # Procesamos el fragmento
+                buffer += chunk.split(b'__END__')[0]
                 break
             buffer += chunk
         try:
@@ -35,23 +33,22 @@ class Worker0:
             print(f"[Worker 0] Datos recibidos completos: {buffer}")
             return None
 
-    def send_large_data(self, socket, data):
-        """Envía datos grandes en fragmentos."""
+    def send_large_data(self, conn, data):
         serialized_data = json.dumps(data).encode('utf-8')
-        socket.sendall(serialized_data)
-        socket.sendall(b'__END__')  # Marcamos el final del mensaje
+        conn.sendall(serialized_data)
+        conn.sendall(b'__END__')  # Marcamos el final del mensaje
 
     def sort_vector(self, vector, algorithm, time_limit):
         stop_flag.clear()
         start_time = time.time()
         sort_func = {"mergesort": merge_sort, "heapsort": heap_sort, "quicksort": quick_sort}[algorithm]
 
-        sort_thread = threading.Thread(target=sort_func, args=(vector,start_time,time_limit))
+        sort_thread = threading.Thread(target=sort_func, args=(vector, start_time, time_limit))
         sort_thread.start()
         elapsed_time = time.time() - start_time
         sort_thread.join(timeout=time_limit)
 
-        if sort_thread.is_alive() and elapsed_time>time_limit:
+        if sort_thread.is_alive() and elapsed_time > time_limit:
             stop_flag.set()
             print("[Worker 0] Tiempo límite alcanzado. Delegando a Worker 1.")
             sort_thread.join()
@@ -59,15 +56,12 @@ class Worker0:
         return True, vector, time.time() - start_time
 
     def handle_client(self, conn):
-        
         try:
             task = self.recv_large_data(conn)
             if task is None:
-              return  # Si hubo un error al recibir los datos, terminamos
-        
-        # Identifica si la tarea proviene del cliente o de worker_1
-            source = task.get("source", "client")  # Por defecto, la tarea viene del cliente
-        
+                return  # Si hubo un error al recibir los datos, terminamos
+
+            source = task.get("source", "client")
             vector, algorithm, time_limit = task["vector"], task["algorithm"], task["time_limit"]
             print(f"[Worker 0] Recibida tarea desde {source} con {len(vector)} elementos, algoritmo: {algorithm}")
 
@@ -75,17 +69,15 @@ class Worker0:
             if success:
                 response = {"vector": vector, "time": elapsed_time, "worker_id": 0}
             else:
-                # Verifica la fuente antes de delegar nuevamente
                 if source == "client":
                     print("[Worker 0] Delegando tarea a Worker 1.")
                     self.delegate_to_worker1(task, conn)
                 elif source == "worker_1":
                     print("[Worker 0] Tarea regresada desde Worker 1 no completada.")
-                    self.delegate_to_worker1(task,conn)
-                    conn.sendall(json.dumps(response).encode('utf-8'))
+                    self.delegate_to_worker1(task, conn)
                 return
 
-            conn.sendall(json.dumps(response).encode('utf-8'))  # Enviamos la respuesta al cliente o worker
+            self.send_large_data(conn, response)
         except Exception as e:
             print(f"[Worker 0] Error: {e}")
         finally:
@@ -95,31 +87,28 @@ class Worker0:
         try:
             print("[Worker 0] Conectando a Worker 1...")
             with socket.create_connection((CONFIG_PARAMS['SERVER_IP_ADDRESS'], CONFIG_PARAMS['WORKER_1_PORT'])) as worker1_socket:
-             task["source"] = "worker_0"  # Indicar la fuente de la tarea
-             self.send_large_data(worker1_socket, task)
-            
-             # Recibe la respuesta del worker_1
-             response = self.recv_large_data(worker1_socket)
-             print(f"[Worker 0] Respuesta recibida de Worker 1: {response}")
-            
-             conn.sendall(json.dumps(response).encode('utf-8'))  # Envía la respuesta al cliente
+                task["source"] = "worker_0"
+                self.send_large_data(worker1_socket, task)
+                response = self.recv_large_data(worker1_socket)
+                print(f"[Worker 0] Respuesta recibida de Worker 1: {response}")
+                self.send_large_data(conn, response)
         except socket.timeout:
-         print("[Worker 0] Tiempo de espera agotado al conectar con Worker 1.")
-         response = {"error": "Worker 1 no respondió a tiempo"}
-         conn.sendall(json.dumps(response).encode('utf-8'))
+            print("[Worker 0] Tiempo de espera agotado al conectar con Worker 1.")
+            response = {"error": "Worker 1 no respondió a tiempo"}
+            self.send_large_data(conn, response)
         except Exception as e:
-         print(f"[Worker 0] Error al conectar con Worker 1: {e}")
-         response = {"error": "Fallo la conexión con Worker 1"}
-         conn.sendall(json.dumps(response).encode('utf-8'))
+            print(f"[Worker 0] Error al conectar con Worker 1: {e}")
+            response = {"error": "Fallo la conexión con Worker 1"}
+            self.send_large_data(conn, response)
 
     def run(self):
-     while True:
-        try:
-            conn, _ = self.server_socket.accept()
-            print("[Worker 0] Conexión recibida. Procesando tarea...")
-            self.handle_client(conn)
-        except Exception as e:
-            print(f"[Worker 0] Error: {e}")
+        while True:
+            try:
+                conn, _ = self.server_socket.accept()
+                print("[Worker 0] Conexión recibida. Procesando tarea...")
+                self.handle_client(conn)
+            except Exception as e:
+                print(f"[Worker 0] Error: {e}")
 
 if __name__ == '__main__':
     Worker0().run()
